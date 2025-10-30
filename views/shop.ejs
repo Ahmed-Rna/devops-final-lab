@@ -1,0 +1,194 @@
+<%- include('partials/header', { title: 'Shop Medicines' }) %>
+
+<main class="shop-page">
+  <div class="container">
+    <h1>Available Medicines</h1>
+
+    <div class="filters">
+      <select id="category-filter" class="filter-select">
+        <option value="">All Categories</option>
+        <option value="General">General</option>
+        <option value="Painkiller">Painkiller</option>
+        <option value="Antibiotic">Antibiotic</option>
+        <option value="Vitamin">Vitamin</option>
+        <option value="Supplement">Supplement</option>
+      </select>
+    </div>
+
+    <div id="medicines-grid" class="medicines-grid"></div>
+  </div>
+</main>
+
+<div id="buy-modal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2>Purchase Medicine</h2>
+    <form id="buy-form">
+      <input type="hidden" id="medicine-id">
+      <p><strong id="modal-medicine-name"></strong></p>
+      <p>Price: $<span id="modal-price"></span></p>
+      <p>Available Stock: <span id="modal-stock"></span></p>
+
+      <div class="form-group">
+        <label for="customer-name">Your Name:</label>
+        <input type="text" id="customer-name" required>
+      </div>
+
+      <div class="form-group">
+        <label for="customer-email">Your Email:</label>
+        <input type="email" id="customer-email" required>
+      </div>
+
+      <div class="form-group">
+        <label for="quantity">Quantity:</label>
+        <input type="number" id="quantity" min="1" value="1" required>
+      </div>
+
+      <p><strong>Total: $<span id="total-price">0</span></strong></p>
+
+      <button type="submit" class="btn btn-primary">Confirm Purchase</button>
+    </form>
+    <div id="modal-message" class="message"></div>
+  </div>
+</div>
+
+<script>
+  let allMedicines = [];
+  let currentMedicine = null;
+
+  async function loadMedicines() {
+    try {
+      const response = await fetch('/api/medicines');
+      const data = await response.json();
+
+      if (data.success) {
+        allMedicines = data.data;
+        displayMedicines(allMedicines);
+      }
+    } catch (error) {
+      console.error('Error loading medicines:', error);
+    }
+  }
+
+  function displayMedicines(medicines) {
+    const container = document.getElementById('medicines-grid');
+    container.innerHTML = '';
+
+    if (medicines.length === 0) {
+      container.innerHTML = '<p>No medicines available at the moment.</p>';
+      return;
+    }
+
+    medicines.forEach(medicine => {
+      const card = document.createElement('div');
+      card.className = 'medicine-card';
+      card.innerHTML = `
+        ${medicine.image_url ? `<img src="${medicine.image_url}" alt="${medicine.name}">` : ''}
+        <h3>${medicine.name}</h3>
+        <p class="medicine-description">${medicine.description}</p>
+        <p class="medicine-category">${medicine.category}</p>
+        <p class="medicine-price">$${medicine.price}</p>
+        <p class="medicine-stock ${medicine.stock === 0 ? 'out-of-stock' : ''}">
+          ${medicine.stock > 0 ? `In Stock: ${medicine.stock}` : 'Out of Stock'}
+        </p>
+        
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  document.getElementById('category-filter').addEventListener('change', (e) => {
+    const category = e.target.value;
+    if (category) {
+      const filtered = allMedicines.filter(m => m.category === category);
+      displayMedicines(filtered);
+    } else {
+      displayMedicines(allMedicines);
+    }
+  });
+
+  function openBuyModal(medicine) {
+    currentMedicine = medicine;
+    document.getElementById('medicine-id').value = medicine.id;
+    document.getElementById('modal-medicine-name').textContent = medicine.name;
+    document.getElementById('modal-price').textContent = medicine.price;
+    document.getElementById('modal-stock').textContent = medicine.stock;
+    document.getElementById('quantity').max = medicine.stock;
+    updateTotal();
+
+    document.getElementById('buy-modal').style.display = 'block';
+  }
+
+  function updateTotal() {
+    const quantity = parseInt(document.getElementById('quantity').value) || 1;
+    const price = parseFloat(currentMedicine.price);
+    const total = (quantity * price).toFixed(2);
+    document.getElementById('total-price').textContent = total;
+  }
+
+  document.getElementById('quantity').addEventListener('input', updateTotal);
+
+  document.querySelector('.close').addEventListener('click', () => {
+    document.getElementById('buy-modal').style.display = 'none';
+    document.getElementById('buy-form').reset();
+    document.getElementById('modal-message').style.display = 'none';
+  });
+
+  window.addEventListener('click', (e) => {
+    const modal = document.getElementById('buy-modal');
+    if (e.target === modal) {
+      modal.style.display = 'none';
+    }
+  });
+
+  document.getElementById('buy-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const quantity = parseInt(document.getElementById('quantity').value);
+    if (quantity > currentMedicine.stock) {
+      showModalMessage('Insufficient stock available', 'error');
+      return;
+    }
+
+    const orderData = {
+      medicine_id: document.getElementById('medicine-id').value,
+      customer_name: document.getElementById('customer-name').value,
+      customer_email: document.getElementById('customer-email').value,
+      quantity: quantity
+    };
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showModalMessage('Order placed successfully!', 'success');
+        setTimeout(() => {
+          document.getElementById('buy-modal').style.display = 'none';
+          document.getElementById('buy-form').reset();
+          loadMedicines();
+        }, 2000);
+      } else {
+        showModalMessage(data.error || 'Error placing order', 'error');
+      }
+    } catch (error) {
+      showModalMessage('Error placing order', 'error');
+    }
+  });
+
+  function showModalMessage(text, type) {
+    const messageDiv = document.getElementById('modal-message');
+    messageDiv.textContent = text;
+    messageDiv.className = `message ${type}`;
+    messageDiv.style.display = 'block';
+  }
+
+  loadMedicines();
+</script>
+
+<%- include('partials/footer') %>
