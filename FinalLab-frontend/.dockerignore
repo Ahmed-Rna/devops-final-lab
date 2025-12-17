@@ -1,8 +1,7 @@
 node_modules
 npm-debug.log
-Dockerfile
-.dockerignore
+.env
 .git
 .gitignore
-*.md
-.DS_Store
+README.md
+dist
